@@ -1,6 +1,6 @@
 # redis-pub-sub
 
-用 Redis Pub/Sub 解決 WebSocket 在多後端 instance 水平擴展下的訊息同步問題的練習專案。
+用 Redis Pub/Sub 解決 WebSocket 在多後端 instance 水平擴展下的訊息同步問題的專案。
 
 ## 問題與目標
 
@@ -9,11 +9,11 @@ WebSocket 連線是有狀態的：client 會固定連在某一個後端 instance
 這個專案用 Redis Pub/Sub 當作 instance 之間的訊息匯流排來解決它：每個 instance 收到 client 的訊息後 publish 到 Redis 的同一個 channel；每個 instance（包含自己）都訂閱這個 channel，收到後再廣播給「自己本機」目前連線中的所有 client。
 
 ```
- client A ──WS──▶ Instance 1 ──publish──▶ ┌──────────────┐
+ client A ──WS──▶ Instance 1 ──publish──▶   ┌───────────────┐
                                             │ Redis Pub/Sub │
- client B ──WS──▶ Instance 2 ◀──subscribe──│  (single      │
+ client B ──WS──▶ Instance 2 ◀──subscribe── │  (single      │
                        ▲                    │   channel)    │
-                       └───subscribe────────└──────────────┘
+                       └───subscribe────────└───────────────┘
                                                     ▲
                                        Instance 1 ──┘ (subscribe)
                                        也會收到自己發出的訊息，
