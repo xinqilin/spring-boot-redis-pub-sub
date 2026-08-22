@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<title>Redis Pub/Sub Chat Demo</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 640px; margin: 2rem auto; padding: 0 1rem; }
+  #connect-panel, #chat-panel { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+  #chat-panel { display: none; }
+  input[type=text] { flex: 1; padding: 0.5rem; }
+  button { padding: 0.5rem 1rem; }
+  #messages { list-style: none; padding: 0; margin: 0; border: 1px solid #ccc; border-radius: 4px; height: 320px; overflow-y: auto; }
+  #messages li { padding: 0.4rem 0.6rem; border-bottom: 1px solid #eee; }
+  .instance-badge { display: inline-block; padding: 0.1rem 0.4rem; border-radius: 4px; background: #333; color: #fff; font-size: 0.75rem; margin-right: 0.4rem; }
+  .timestamp { color: #888; font-size: 0.75rem; margin-left: 0.4rem; }
+  #status { color: #888; font-size: 0.85rem; }
+</style>
+</head>
+<body>
+<h1>Redis Pub/Sub Chat Demo</h1>
+<p id="status">尚未連線</p>
+
+<div id="connect-panel">
+  <input type="text" id="username" placeholder="輸入 username">
+  <button id="connect-btn">Connect</button>
+</div>
+
+<div id="chat-panel">
+  <input type="text" id="content" placeholder="輸入訊息，按 Enter 送出">
+  <button id="send-btn">Send</button>
+</div>
+
+<ul id="messages"></ul>
+
+<script>
+  let ws = null;
+
+  const statusEl = document.getElementById('status');
+  const connectPanel = document.getElementById('connect-panel');
+  const chatPanel = document.getElementById('chat-panel');
+  const usernameInput = document.getElementById('username');
+  const contentInput = document.getElementById('content');
+  const messagesEl = document.getElementById('messages');
+
+  function appendMessage(chatMessage) {
+    const li = document.createElement('li');
+
+    const badge = document.createElement('span');
+    badge.className = 'instance-badge';
+    badge.textContent = chatMessage.sourceInstanceId;
+
+    const time = new Date(chatMessage.timestamp).toLocaleTimeString();
+
+    li.appendChild(badge);
+    li.append(`${chatMessage.username}: ${chatMessage.content}`);
+
+    const timeEl = document.createElement('span');
+    timeEl.className = 'timestamp';
+    timeEl.textContent = time;
+    li.appendChild(timeEl);
+
+    messagesEl.appendChild(li);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  function setConnected(connected) {
+    connectPanel.style.display = connected ? 'none' : 'flex';
+    chatPanel.style.display = connected ? 'flex' : 'none';
+    statusEl.textContent = connected ? `已連線（${location.host}）` : '尚未連線';
+  }
+
+  function connect() {
+    const username = usernameInput.value.trim();
+    if (!username) {
+      return;
+    }
+    const protocol = location.protocol === 'https:' ? 'wss://' : 'ws://';
+    ws = new WebSocket(`${protocol}${location.host}/ws?username=${encodeURIComponent(username)}`);
+
+    ws.onopen = () => setConnected(true);
+    ws.onmessage = (event) => appendMessage(JSON.parse(event.data));
+    ws.onclose = () => setConnected(false);
+    ws.onerror = () => setConnected(false);
+  }
+
+  function send() {
+    const content = contentInput.value.trim();
+    if (!content || !ws || ws.readyState !== WebSocket.OPEN) {
+      return;
+    }
+    ws.send(content);
+    contentInput.value = '';
+  }
+
+  document.getElementById('connect-btn').addEventListener('click', connect);
+  document.getElementById('send-btn').addEventListener('click', send);
+  contentInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      send();
+    }
+  });
+  usernameInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      connect();
+    }
+  });
+</script>
+</body>
+</html>
