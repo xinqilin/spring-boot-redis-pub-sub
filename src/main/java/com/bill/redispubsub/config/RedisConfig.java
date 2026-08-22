@@ -19,16 +19,19 @@ import org.springframework.data.redis.listener.RedisMessageListenerContainer;
 @Configuration
 public class RedisConfig {
 
-  /** 聊天訊息廣播用的單一 global channel，channel 名稱來自設定檔的 {@code app.chat.channel}。 */
+  /**
+   * 聊天訊息廣播用的單一 global channel，channel 名稱來自設定檔的 {@code app.chat.channel}。
+   */
   @Bean
   ChannelTopic chatTopic(@Value("${app.chat.channel}") String channel) {
     return new ChannelTopic(channel);
   }
 
-  /** 讓 {@link ChatRedisSubscriber} 訂閱 {@link #chatTopic} 這個 channel，收到訊息時觸發它的回呼。 */
+  /**
+   * 讓 {@link ChatRedisSubscriber} 訂閱 {@link #chatTopic} 這個 channel，收到訊息時觸發它的回呼。
+   */
   @Bean
-  RedisMessageListenerContainer redisMessageListenerContainer(
-      RedisConnectionFactory connectionFactory, ChatRedisSubscriber subscriber, ChannelTopic chatTopic) {
+  RedisMessageListenerContainer redisMessageListenerContainer(RedisConnectionFactory connectionFactory, ChatRedisSubscriber subscriber, ChannelTopic chatTopic) {
     RedisMessageListenerContainer container = new RedisMessageListenerContainer();
     container.setConnectionFactory(connectionFactory);
     container.addMessageListener(subscriber, chatTopic);

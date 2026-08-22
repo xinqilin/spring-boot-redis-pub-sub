@@ -33,17 +33,23 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
    */
   private static final int SEND_TIME_LIMIT_MS = 10_000;
 
-  /** 單一 session 允許緩衝的位元組上限，超過就會被強制關閉。 */
+  /**
+   * 單一 session 允許緩衝的位元組上限，超過就會被強制關閉。
+   */
   private static final int BUFFER_SIZE_LIMIT_BYTES = 512 * 1024;
 
-  /** 目前連線在這個 instance 上的 session，key 是 session id。 */
+  /**
+   * 目前連線在這個 instance 上的 session，key 是 session id。
+   */
   private final Map<String, WebSocketSession> sessions = new ConcurrentHashMap<>();
 
   private final StringRedisTemplate stringRedisTemplate;
   private final ObjectMapper objectMapper;
   private final ChannelTopic chatTopic;
 
-  /** 這個 instance 的識別碼，會被埋進這個 instance 發出的每則訊息裡。 */
+  /**
+   * 這個 instance 的識別碼，會被埋進這個 instance 發出的每則訊息裡。
+   */
   private final String instanceId;
 
   public ChatWebSocketHandler(

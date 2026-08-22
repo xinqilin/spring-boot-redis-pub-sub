@@ -48,7 +48,9 @@ public class UsernameHandshakeInterceptor implements HandshakeInterceptor {
     return true;
   }
 
-  /** 握手後不需要額外處理，僅為了滿足 {@link HandshakeInterceptor} 介面而存在。 */
+  /**
+   * 握手後不需要額外處理，僅為了滿足 {@link HandshakeInterceptor} 介面而存在。
+   */
   @Override
   public void afterHandshake(
       ServerHttpRequest request,

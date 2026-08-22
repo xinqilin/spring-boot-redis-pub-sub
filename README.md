@@ -20,6 +20,21 @@ WebSocket 連線是有狀態的：client 會固定連在某一個後端 instance
                                        再廣播給自己本機的 session
 ```
 
+## 為什麼 Redis 能同時做 Cache 跟 Pub/Sub
+
+Redis 本質上是一個**單執行緒事件迴圈 + 記憶體內資料結構**的伺服器，cache 和 pub/sub 只是操作在這個共用引擎上的兩種不同指令集，不是兩套系統拼起來的。
+
+**Cache 那一面**：`SET`/`GET`/`EXPIRE` 操作的是 keyspace——一個巨大的 hash table，key 對應到 value（string/list/hash/...），可選擇性地透過 RDB/AOF 持久化到磁碟。
+
+**Pub/Sub 那一面**：Redis 內部另外維護一個「channel → 訂閱者連線清單」的對照表（本質上也是個 hash table，value 是這個 channel 上所有還開著的 client socket）。
+
+- `SUBSCRIBE channel` 做的事：把這條 client 連線加進該 channel 的訂閱清單，並把這條連線切換成「訂閱模式」（之後這條連線只能收 push、不能再下一般指令，這是 RESP 協定層面的限制，也是為什麼 `RedisMessageListenerContainer` 要另外拉一條專用連線來監聽，不能跟平常下 command 的連線共用）。
+- `PUBLISH channel msg` 做的事：查一下該 channel 的訂閱清單，對清單上每一條連線的 socket 直接寫入這則訊息。就這樣，單執行緒依序處理完就結束。
+
+**關鍵差異，也是本專案「不持久化」的根本原因**：pub/sub 的訊息**完全不進 keyspace**，不寫 RDB、不寫 AOF、不佔用任何 key。`PUBLISH` 純粹是「當下有誰在聽就發給誰」，沒人訂閱就直接丟掉，訊息本身從來沒有被「儲存」過——它只存在於「從 publisher 的 socket 讀進來，立刻寫到 subscriber 的 socket」這個瞬間。這也是為什麼可以用 `redis-cli MONITOR` 或 `SUBSCRIBE` 即時看到 command，但不可能事後用任何指令把已經發過的訊息「查」出來。
+
+之所以 cache 和 pub/sub 能長在同一顆 Redis 裡毫無違和感，是因為它們共用同一個 event loop、同一條 TCP 連線管理機制、同一套 RESP 協定，差別只在於**操作的是哪一份記憶體內的資料結構**（keyspace 的 hash table vs. channel 訂閱清單）。這也解釋了為什麼本專案裡同一個 `RedisConnectionFactory` 就能同時支援兩種用途——底層就是同一個東西。
+
 ## 架構決策與範圍
 
 | 決策 | 選擇 | 理由 |
@@ -122,6 +137,46 @@ docker compose up --build
 ```bash
 docker compose down
 ```
+
+## 用 redis-cli 直接觀察 Pub/Sub
+
+想親眼看 Redis 這邊 pub/sub 的狀態，不透過瀏覽器，可以連進 `docker compose up` 起的 `redis` container：
+
+```bash
+docker compose exec redis redis-cli
+```
+
+進去後可以查目前有哪些 channel、各自幾個訂閱者（`app-1`、`app-2` 各自的 `RedisMessageListenerContainer` 都會佔一個訂閱數）：
+
+```
+127.0.0.1:6379> PUBSUB CHANNELS
+1) "chat-broadcast"
+127.0.0.1:6379> PUBSUB NUMSUB chat-broadcast
+1) "chat-broadcast"
+2) (integer) 2
+```
+
+想即時看訊息本身（`ChatWebSocketHandler` publish 出去的原始 JSON），另開一個 terminal 直接訂閱該 channel，讓它卡在那裡監看，再回瀏覽器發訊息：
+
+```bash
+docker compose exec redis redis-cli SUBSCRIBE chat-broadcast
+```
+
+會看到類似這樣的輸出（一則訊息只會被 publish 一次，但因為 app-1 和 app-2 都訂閱了同一個 channel，兩邊各自的 `ChatRedisSubscriber` 都會收到）：
+
+```
+1) "message"
+2) "chat-broadcast"
+3) "{\"username\":\"alice\",\"content\":\"hello\",\"timestamp\":\"2026-08-22T14:39:26.68Z\",\"sourceInstanceId\":\"app-1\"}"
+```
+
+想看更底層、包含 `PUBLISH` 指令本身是誰下的（可以確認 app-1／app-2 是不是都真的有連上、有在發指令），改用：
+
+```bash
+docker compose exec redis redis-cli MONITOR
+```
+
+`MONITOR` 會即時印出 Redis 收到的每一條指令，量大時會很吵，用完記得 `Ctrl+C` 離開，不要長時間掛著（正式環境更是完全不該用，會拖累 Redis 效能）。
 
 ## 環境變數
 
